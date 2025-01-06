@@ -14,7 +14,7 @@ namespace api.Mapper
             return new PostDto
             {
                 PostId = post.PostId,
-                PostedBy = post.User.UserName ?? string.Empty,
+                PostedBy = post.User?.UserName ?? string.Empty,
                 Title = post.Title,
                 Content = post.Content,
                 CreatedAt = post.CreatedAt,

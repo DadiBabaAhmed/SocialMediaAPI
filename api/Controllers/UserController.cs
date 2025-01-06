@@ -1,8 +1,10 @@
+using System.Security.Claims;
 using api.Data;
 using api.DTOs.User;
 using api.Interfaces;
 using api.Mapper;
 using api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +13,7 @@ using RouteAttribute = Microsoft.AspNetCore.Mvc.RouteAttribute;
 
 namespace api.Controllers
 {
-    [Route("api/user")]
+    [Route("api/user/[action]")]
     [ApiController]
     public class UserController : ControllerBase
     {
@@ -26,6 +28,25 @@ namespace api.Controllers
             _signinManager = signinManager;
         }
 
+        [HttpGet]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetAllUsers()
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var users = await _userManager.Users.ToListAsync();
+            var userDtos = users.Select(u => new UserDto
+            {
+                Id = u.Id,
+                UserName = u.UserName ?? string.Empty,
+                Email = u.Email ?? string.Empty,
+            }).ToList();
+            return Ok(userDtos);
+        }
+
         [HttpPost("Register")]
         public async Task<IActionResult> Register([FromBody] RegisterUserRequestDto requestDtoDto)
         {
@@ -34,26 +55,26 @@ namespace api.Controllers
                 if(!ModelState.IsValid)
                     return BadRequest(ModelState);
 
-                var user = new User
+                var userModel = new User
                 {
                     UserName = requestDtoDto.Username,
                     Email = requestDtoDto.Email,
                     ProfilePicture = requestDtoDto.ProfilePicture
                 };
 
-                var result = await _userManager.CreateAsync(user, requestDtoDto.Password);
+                var result = await _userManager.CreateAsync(userModel, requestDtoDto.Password);
 
                 if(result.Succeeded)
                 {
-                    var roleResult = await _userManager.AddToRoleAsync(user, "User");
+                    var roleResult = await _userManager.AddToRoleAsync(userModel, "User");
                     if(roleResult.Succeeded)
                     {
                         return Ok(
                             new UserDto
                             {
-                                UserName = user.UserName,
-                                Email = user.Email,
-                                Token = _tokenService.CreateToken(user)
+                                UserName = userModel.UserName ?? string.Empty,
+                                Email = userModel.Email ?? string.Empty,
+                                Token = _tokenService.CreateToken(userModel)
                             }
                         );
                     }
@@ -79,22 +100,72 @@ namespace api.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var user = await _userManager.Users.FirstOrDefaultAsync(u => u.UserName == loginDto.Username.ToLower());
+            var userModel = await _userManager.Users.FirstOrDefaultAsync(u => u.UserName == loginDto.Username.ToLower());
 
-            if (user == null) return Unauthorized("Invalid username!");
+            if (userModel == null) return Unauthorized("Invalid username!");
 
-            var result = await _signinManager.CheckPasswordSignInAsync(user, loginDto.Password, false);
+            var result = await _signinManager.CheckPasswordSignInAsync(userModel, loginDto.Password, false);
 
             if (!result.Succeeded) return Unauthorized("Username not found and/or password incorrect");
 
             return Ok(
                 new UserDto
                 {
-                    UserName = user.UserName,
-                    Email = user.Email,
-                    Token = _tokenService.CreateToken(user)
+                    UserName = userModel.UserName ?? string.Empty,
+                    Email = userModel.Email ?? string.Empty,
+                    Token = _tokenService.CreateToken(userModel)
                 }
             );
+        }
+
+        [HttpPut]
+        [Route("{id}")]
+        [Authorize]
+        public async Task<IActionResult> UpdateUser([FromRoute] string id, [FromBody] UpdateUserRequestDto updatedUserDto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            // Get the logged-in user's ID
+            var loggedInUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // Check if the logged-in user's ID matches the ID of the user being edited
+            if (loggedInUserId != id)
+            {
+                return Forbid("You are not authorized to update this user.");
+            }
+
+            var userModel = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == id);
+
+            if (userModel == null)
+            {
+                return NotFound("User not found");
+            }
+
+            userModel.UserName = updatedUserDto.Username;
+            userModel.PasswordHash = _userManager.PasswordHasher.HashPassword(userModel, updatedUserDto.Password);
+            userModel.Email = updatedUserDto.Email;
+            userModel.ProfilePicture = updatedUserDto.ProfilePicture;
+
+            var result = await _userManager.UpdateAsync(userModel);
+
+            if (result.Succeeded)
+            {
+                return Ok(
+                    new UserDto
+                    {
+                        UserName = userModel.UserName ?? string.Empty,
+                        Email = userModel.Email ?? string.Empty,
+                        Token = _tokenService.CreateToken(userModel)
+                    }
+                );
+            }
+            else
+            {
+                return StatusCode(500, result.Errors);
+            }
         }
     }
 }

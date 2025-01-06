@@ -11,11 +11,6 @@ namespace api.Mapper
     {
         public static CommentDto ToCommentDto(this Comment comment)
         {
-            if (comment == null)
-            {
-                return null;
-            }
-
             return new CommentDto
             {
                 CommentId = comment.CommentId,

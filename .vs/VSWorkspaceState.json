@@ -2,8 +2,13 @@
   "ExpandedNodes": [
     "",
     "\\api",
-    "\\api\\Data"
+    "\\api\\Data",
+    "\\api\\Interfaces",
+    "\\api\\Mapper",
+    "\\api\\Migrations",
+    "\\api\\Models",
+    "\\api\\Properties"
   ],
-  "SelectedNode": "\\api\\Data\\ApplicationDBContext.cs",
+  "SelectedNode": "\\api\\api.csproj",
   "PreviewInSolutionExplorer": false
 }

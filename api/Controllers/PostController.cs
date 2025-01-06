@@ -15,7 +15,7 @@ using api.Extensions;
 
 namespace api.Controllers
 {
-    [Route("api/post")]
+    [Route("api/post/[action]")]
     [ApiController]
     public class PostController : ControllerBase
     {
@@ -28,7 +28,7 @@ namespace api.Controllers
         }
         
         [HttpGet]
-        [Authorize]
+        //[Authorize]
         public async Task<IActionResult> GetAllPosts([FromQuery] QueryObject queryObject)
         {
              if(!ModelState.IsValid)
@@ -47,16 +47,16 @@ namespace api.Controllers
             {
                 return BadRequest(ModelState);
             }
-            var post = await _postRepository.GetPostByIdAsync(id);
-            if (post == null)
+            var postModel = await _postRepository.GetPostByIdAsync(id);
+            if (postModel == null)
             {
                 return NotFound();
             }
-            return Ok(post.ToPostDto());
+            return Ok(postModel.ToPostDto());
         }
 
         [HttpPost]
-        [Authorize]
+        //[Authorize]
         [Route("{Userid}")]
         public async Task<IActionResult> CreatePost([FromRoute] string Userid,[FromBody] CreatePostRequestDto postDto)
         {
@@ -71,12 +71,16 @@ namespace api.Controllers
             }
 
             var postModel = postDto.ToPostFromCreateDTO(Userid);
+
             await _postRepository.CreatePostAsync(postModel);
-            return CreatedAtAction(nameof(GetPostById), new { id = postModel.PostId }, postModel.ToPostDto());
+
+            var createdPost = await _postRepository.GetPostByIdAsync(postModel.PostId);
+
+            return CreatedAtAction(nameof(GetPostById), new { id = postModel.PostId }, createdPost.ToPostDto());
         }
 
         [HttpPut]
-        [Authorize]
+        //[Authorize]
         [Route("{id:int}")]
         public async Task<IActionResult> UpdatePost([FromRoute] int id, [FromBody] UpdatePostRequestDto updatedPostDto)
         {
@@ -97,7 +101,7 @@ namespace api.Controllers
         }
 
         [HttpDelete]
-        [Authorize]
+        //[Authorize]
         [Route("{id:int}")]
         public async Task<IActionResult> DeletePost([FromRoute] int id)
         {
