@@ -47,6 +47,33 @@ namespace api.Controllers
             return Ok(userDtos);
         }
 
+        [HttpGet]
+        [Route("{id}")]
+        [Authorize]
+        public async Task<IActionResult> GetUserById([FromRoute] string id)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var userModel = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == id);
+
+            if (userModel == null)
+            {
+                return NotFound("User not found");
+            }
+
+            return Ok(
+                new UserDto
+                {
+                    Id = userModel.Id,
+                    UserName = userModel.UserName ?? string.Empty,
+                    Email = userModel.Email ?? string.Empty,
+                }
+            );
+        }
+
         [HttpPost("Register")]
         public async Task<IActionResult> Register([FromBody] RegisterUserRequestDto requestDtoDto)
         {
@@ -111,6 +138,7 @@ namespace api.Controllers
             return Ok(
                 new UserDto
                 {
+                    Id = userModel.Id,
                     UserName = userModel.UserName ?? string.Empty,
                     Email = userModel.Email ?? string.Empty,
                     Token = _tokenService.CreateToken(userModel)
@@ -134,14 +162,14 @@ namespace api.Controllers
             // Check if the logged-in user's ID matches the ID of the user being edited
             if (loggedInUserId != id)
             {
-                return Forbid("You are not authorized to update this user.");
+                return Forbid();
             }
 
             var userModel = await _userManager.Users.FirstOrDefaultAsync(u => u.Id == id);
 
             if (userModel == null)
             {
-                return NotFound("User not found");
+                return NotFound();
             }
 
             userModel.UserName = updatedUserDto.Username;

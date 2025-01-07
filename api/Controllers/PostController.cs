@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Identity;
 using api.Models;
 using Microsoft.AspNetCore.Authorization;
 using api.Extensions;
+using System.Security.Claims;
 
 namespace api.Controllers
 {
@@ -28,7 +29,6 @@ namespace api.Controllers
         }
         
         [HttpGet]
-        //[Authorize]
         public async Task<IActionResult> GetAllPosts([FromQuery] QueryObject queryObject)
         {
              if(!ModelState.IsValid)
@@ -56,31 +56,36 @@ namespace api.Controllers
         }
 
         [HttpPost]
-        //[Authorize]
-        [Route("{Userid}")]
-        public async Task<IActionResult> CreatePost([FromRoute] string Userid,[FromBody] CreatePostRequestDto postDto)
+        [Authorize]
+        public async Task<IActionResult> CreatePost([FromBody] CreatePostRequestDto postDto)
         {
              if(!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
 
-            if(!await _userManager.Users.AnyAsync(u => u.Id == Userid))
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (userId == null)
             {
-                return BadRequest("User does not exist");
+                return Unauthorized();
             }
 
-            var postModel = postDto.ToPostFromCreateDTO(Userid);
+            var postModel = postDto.ToPostFromCreateDTO(userId);
 
             await _postRepository.CreatePostAsync(postModel);
 
             var createdPost = await _postRepository.GetPostByIdAsync(postModel.PostId);
+            if(createdPost == null)
+            {
+                return NotFound();
+            }
 
             return CreatedAtAction(nameof(GetPostById), new { id = postModel.PostId }, createdPost.ToPostDto());
         }
 
         [HttpPut]
-        //[Authorize]
+        [Authorize]
         [Route("{id:int}")]
         public async Task<IActionResult> UpdatePost([FromRoute] int id, [FromBody] UpdatePostRequestDto updatedPostDto)
         {
@@ -92,6 +97,21 @@ namespace api.Controllers
             {
                 return BadRequest();
             }
+
+            var loggedInUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var verifPost = await _postRepository.GetPostByIdAsync(id);
+
+            if (verifPost == null)
+            {
+                return NotFound();
+            }
+
+            if (verifPost.UserId != loggedInUserId)
+            {
+                return Forbid();
+            }
+
             var postModel = await _postRepository.UpdatePostAsync(id, updatedPostDto);
             if (postModel == null)
             {
@@ -101,7 +121,7 @@ namespace api.Controllers
         }
 
         [HttpDelete]
-        //[Authorize]
+        [Authorize]
         [Route("{id:int}")]
         public async Task<IActionResult> DeletePost([FromRoute] int id)
         {
@@ -109,6 +129,26 @@ namespace api.Controllers
             {
                 return BadRequest(ModelState);
             }
+
+            var loggedInUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var verifPost = await _postRepository.GetPostByIdAsync(id);
+
+            if (verifPost == null)
+            {
+                return NotFound();
+            }
+
+            if (verifPost.UserId != loggedInUserId)
+            {
+                return Forbid();
+            }
+
+            if (verifPost.UserId != loggedInUserId && !User.IsInRole("Admin"))
+            {
+                return Forbid();
+            }
+
             var postModel = await _postRepository.DeletePostAsync(id);
             if (postModel == null)
             {

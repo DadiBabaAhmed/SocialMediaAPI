@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace api.Controllers
@@ -28,7 +29,6 @@ namespace api.Controllers
         }
         
         [HttpGet]
-        //[Authorize]
         public async Task<IActionResult> GetAllComments()
         {
             if(!ModelState.IsValid)
@@ -55,9 +55,9 @@ namespace api.Controllers
             return Ok(commentModel.ToCommentDto());
         }
 
-        [HttpPost("{postId:int}/{userId}")]
-        //[Authorize]
-        public async Task<IActionResult> CreateComment([FromRoute] int postId, [FromRoute] string userId, [FromBody] CreateCommentRequestDto commentDto)
+        [HttpPost("{postId:int}")]
+        [Authorize]
+        public async Task<IActionResult> CreateComment([FromRoute] int postId, [FromBody] CreateCommentRequestDto commentDto)
         {
              if(!ModelState.IsValid)
             {
@@ -69,20 +69,28 @@ namespace api.Controllers
                 return BadRequest("Post does not exist");
             }
 
-            if(!await _userManager.Users.AnyAsync(u => u.Id == userId))
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (userId == null)
             {
-                return BadRequest("User does not exist");
+                return Unauthorized();
             }
 
             var commentModel = commentDto.ToCommentFromCreateDTO(postId, userId);
 
             await _commentRepository.CreateCommentAsync(commentModel);
 
-            return CreatedAtAction(nameof(GetCommentById), new { id = commentModel.CommentId }, commentModel.ToCommentDto());
+            var createdComment = await _commentRepository.GetCommentByIdAsync(commentModel.CommentId);
+            if (createdComment == null)
+            {
+                return NotFound();
+            }
+
+            return CreatedAtAction(nameof(GetCommentById), new { id = commentModel.CommentId }, createdComment.ToCommentDto());
         }
 
         [HttpPut]
-        //[Authorize]
+        [Authorize]
         [Route("{id:int}")]
         public async Task<IActionResult> UpdateComment([FromRoute] int id, [FromBody] UpdateCommentRequestDto updatedCommentDto)
         {
@@ -90,16 +98,39 @@ namespace api.Controllers
             {
                 return BadRequest(ModelState);
             }
+
+            var loggedInUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (userId == null)
+            {
+                return Unauthorized();
+            }
+
+            var verifcomment = await _commentRepository.GetCommentByIdAsync(id);
+
+            if (verifcomment == null)
+            {
+                return NotFound();
+            }
+
+            if(verifcomment.UserId != loggedInUserId)
+            {
+                return Unauthorized();
+            }
+
             var commentModel = await _commentRepository.UpdateCommentAsync(id, updatedCommentDto.ToCommentFromUpdateDTO());
             if (commentModel == null)
             {
-                return NotFound("Comment not found");
+                return NotFound();
             }
+
             return Ok(commentModel.ToCommentDto());
         }
 
         [HttpDelete]
-        //[Authorize]
+        [Authorize]
         [Route("{id:int}")]
         public async Task<IActionResult> DeleteComment(int id)
         {
@@ -107,6 +138,33 @@ namespace api.Controllers
             {
                 return BadRequest(ModelState);
             }
+
+            var loggedInUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (userId == null)
+            {
+                return Unauthorized();
+            }
+
+            var verifcomment = await _commentRepository.GetCommentByIdAsync(id);
+
+            if (verifcomment == null)
+            {
+                return NotFound();
+            }
+
+            if(verifcomment.UserId != loggedInUserId)
+            {
+                return Forbid();
+            }
+
+             if (verifcomment.UserId != loggedInUserId && !User.IsInRole("Admin"))
+            {
+                return Forbid();
+            }
+
             var commentModel = await _commentRepository.DeleteCommentAsync(id);
             if (commentModel == null)
             {
